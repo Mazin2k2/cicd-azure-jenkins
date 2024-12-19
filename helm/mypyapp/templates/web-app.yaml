@@ -14,12 +14,11 @@ spec:
     spec:
       containers:
       - name: python-web-app
-        image: ${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG}  # This will be dynamically replaced
+        image: "{{ .Values.appimage }}:{{ .Values.apptag }}"  # Use dynamic image and tag
         ports:
         - containerPort: 8080
       imagePullSecrets:
       - name: regcred  # Secret created for accessing ACR
-
 ---
 apiVersion: v1
 kind: Service
@@ -33,7 +32,6 @@ spec:
       port: 80  # Port exposed outside the cluster
       targetPort: 8080  # Port that the container is listening on
   type: LoadBalancer  # Use LoadBalancer for external access (AKS)
-
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -54,3 +52,4 @@ spec:
             name: python-web-app-service
             port:
               number: 80
+
