@@ -55,12 +55,9 @@ pipeline {
             steps {
                 script {
                     withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG')]) {
-                        // Add debug step to ensure kubectl is using the correct kubeconfig
+                        // Create or update the docker registry secret in AKS
                         sh """
                             export KUBECONFIG=${KUBECONFIG}
-
-                            # Debugging the current context
-                            kubectl config current-context
 
                             # Create or update the docker registry secret
                             kubectl create secret docker-registry regcred \
@@ -69,32 +66,7 @@ pipeline {
                             --docker-password=${ACR_PASSWORD} \
                             --docker-email=${ACR_EMAIL} \
                             --dry-run=client -o yaml | kubectl apply -f -
-
-                            # Verify that the secret was created
-                            kubectl get secrets regcred
                         """
-                    }
-                }
-            }
-        }
-
-        stage('Cleanup AKS Resources') {
-            steps {
-                script {
-                    withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG')]) {
-                        sh '''
-                            export KUBECONFIG=${KUBECONFIG}
-
-                            # Delete the previous deployment if it exists
-                            kubectl delete deployment python-web-app --ignore-not-found=true
-
-                            # Delete the previous service if it exists
-                            kubectl delete service python-web-app-service --ignore-not-found=true
-
-                            # Optionally, delete other resources (e.g., ingress, configmaps)
-                            kubectl delete ingress python-web-app-ingress --ignore-not-found=true
-                            kubectl delete secret regcred --ignore-not-found=true
-                        '''
                     }
                 }
             }
