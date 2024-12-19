@@ -11,7 +11,7 @@ pipeline {
         ACR_EMAIL = 'mazin.abdulkarimrelambda.onmicrosoft.com'  // Your ACR email
         GITHUB_REPO = 'https://github.com/Mazin2k2/cicd-azure-jenkins.git'
         KUBE_CONFIG = credentials('aks-kubeconfig')  // Jenkins secret containing your AKS kubeconfig
-        HELM_CHART_PATH = 'helm/mypyapp/templates'  // Path to your Helm chart
+        HELM_CHART_PATH = 'helm/mypyapp'  // Path to your Helm chart
     }
 
     stages {
