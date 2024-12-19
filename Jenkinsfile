@@ -55,9 +55,12 @@ pipeline {
             steps {
                 script {
                     withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG')]) {
-                        // Create or update the docker registry secret in AKS
+                        // Add debug step to ensure kubectl is using the correct kubeconfig
                         sh """
                             export KUBECONFIG=${KUBECONFIG}
+
+                            # Debugging the current context
+                            kubectl config current-context
 
                             # Create or update the docker registry secret
                             kubectl create secret docker-registry regcred \
@@ -66,6 +69,9 @@ pipeline {
                             --docker-password=${ACR_PASSWORD} \
                             --docker-email=${ACR_EMAIL} \
                             --dry-run=client -o yaml | kubectl apply -f -
+
+                            # Verify that the secret was created
+                            kubectl get secrets regcred
                         """
                     }
                 }
