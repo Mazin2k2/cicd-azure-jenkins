@@ -2,20 +2,21 @@ pipeline {
     agent any
 
     environment {
-        ACR_NAME = 'testacr0909'  // Your Azure Container Registry name
+        ACR_NAME = 'testacr0909'
         ACR_URL = "${ACR_NAME}.azurecr.io"
-        IMAGE_NAME = 'pyimg'  // The Docker image name
-        IMAGE_TAG = "${env.BUILD_ID}"  // Use Jenkins build ID for unique tagging
-        ACR_USERNAME = 'testacr0909'  // ACR username (same as ACR registry name)
-        ACR_PASSWORD = credentials('acr-access-key')  // Jenkins secret with your ACR access key
-        GITHUB_REPO = 'https://github.com/Mazin2k2/cicd-azure-jenkins.git'  // Your GitHub repository
+        IMAGE_NAME = 'pyimg'
+        IMAGE_TAG = "${env.BUILD_ID}"
+        ACR_USERNAME = 'testacr0909'
+        ACR_PASSWORD = credentials('acr-access-key')  // Jenkins secret containing your ACR password
+        ACR_EMAIL = 'mazin.abdulkarimrelambda.onmicrosoft.com'  // Your ACR email
+        GITHUB_REPO = 'https://github.com/Mazin2k2/cicd-azure-jenkins.git'
         KUBE_CONFIG = credentials('aks-kubeconfig')  // Jenkins secret containing your AKS kubeconfig
+        HELM_CHART_PATH = 'helm/mypyapp'  // Path to your Helm chart
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                // Checkout the repository code from GitHub
                 git branch: 'main', url: "${GITHUB_REPO}"
             }
         }
@@ -23,7 +24,6 @@ pipeline {
         stage('Login to ACR') {
             steps {
                 script {
-                    // Login to Azure Container Registry using ACR access key
                     sh '''
                         docker login ${ACR_URL} -u ${ACR_USERNAME} -p ${ACR_PASSWORD}
                     '''
@@ -34,7 +34,6 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Build Docker image and tag it with the ACR URL and unique image tag
                     sh """
                         docker build -t ${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG} .
                     """
@@ -45,7 +44,6 @@ pipeline {
         stage('Push Docker Image to ACR') {
             steps {
                 script {
-                    // Push the Docker image to Azure Container Registry
                     sh """
                         docker push ${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG}
                     """
@@ -53,31 +51,38 @@ pipeline {
             }
         }
 
-        stage('Deploy to AKS') {
+        stage('Create Docker Registry Secret') {
             steps {
                 script {
-                    // Replace placeholders in the web-app.yaml with the actual values
-                    sh """
-                        sed -i 's|${ACR_URL}/${IMAGE_NAME}:.*|${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG}|g' web-app.yaml
-                    """
-
-                    // Deploy the web-app.yaml if the deployment does not exist
                     withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG')]) {
-                        sh '''
+                        // Create the docker registry secret in AKS
+                        sh """
                             export KUBECONFIG=${KUBECONFIG}
 
-                            # Apply the Kubernetes manifest (this will create the deployment if it doesn't exist)
-                            kubectl apply -f web-app.yaml
-                        '''
+                            # Create or update the docker registry secret
+                            kubectl create secret docker-registry regcred \
+                            --docker-server=${ACR_URL} \
+                            --docker-username=${ACR_USERNAME} \
+                            --docker-password=${ACR_PASSWORD} \
+                            --docker-email=${ACR_EMAIL} \
+                            --dry-run=client -o yaml | kubectl apply -f -
+                        """
                     }
+                }
+            }
+        }
 
-                    // Update the deployment image in AKS
+        stage('Deploy to AKS using Helm') {
+            steps {
+                script {
                     withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG')]) {
                         sh '''
                             export KUBECONFIG=${KUBECONFIG}
 
-                            # Update the image of the deployment
-                            kubectl set image deployment/python-web-app python-web-app=${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG} --record
+                            # Deploy the Helm chart with the dynamic image and tag
+                            helm upgrade --install python-web-app ${HELM_CHART_PATH} \
+                            --set appimage=${ACR_URL}/${IMAGE_NAME} \
+                            --set apptag=${IMAGE_TAG}
                         '''
                     }
                 }
@@ -87,7 +92,6 @@ pipeline {
         stage('Clean up Docker Images') {
             steps {
                 script {
-                    // Clean up local Docker images to save space
                     sh """
                         docker rmi ${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG}
                     """
@@ -98,7 +102,7 @@ pipeline {
 
     post {
         success {
-            echo 'Docker image successfully built, pushed to ACR, and deployed to AKS!'
+            echo 'Docker image successfully built, pushed to ACR, secret created, and deployed using Helm to AKS!'
         }
         failure {
             echo 'There was an error in the pipeline!'
