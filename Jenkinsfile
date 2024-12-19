@@ -56,17 +56,28 @@ pipeline {
         stage('Deploy to AKS') {
             steps {
                 script {
-                    // Deploy to AKS using kubectl
+                    // Replace placeholders in the web-app.yaml with the actual values
+                    sh """
+                        sed -i 's|${ACR_URL}/${IMAGE_NAME}:.*|${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG}|g' web-app.yaml
+                    """
+
+                    // Deploy the web-app.yaml if the deployment does not exist
                     withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG')]) {
                         sh '''
-                            # Ensure kubectl is configured with the correct credentials
                             export KUBECONFIG=${KUBECONFIG}
 
-                            # Update the image in the Kubernetes deployment
-                            kubectl set image deployment/python-web-app python-web-app=${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG} --record
-
-                            # Apply Kubernetes manifests (optional: for initial deployment)
+                            # Apply the Kubernetes manifest (this will create the deployment if it doesn't exist)
                             kubectl apply -f web-app.yaml
+                        '''
+                    }
+
+                    // Update the deployment image in AKS
+                    withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            export KUBECONFIG=${KUBECONFIG}
+
+                            # Update the image of the deployment
+                            kubectl set image deployment/python-web-app python-web-app=${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG} --record
                         '''
                     }
                 }
