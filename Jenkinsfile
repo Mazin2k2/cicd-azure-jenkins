@@ -9,6 +9,7 @@ pipeline {
         ACR_USERNAME = 'testacr0909'  // ACR username (same as ACR registry name)
         ACR_PASSWORD = credentials('acr-access-key')  // Jenkins secret with your ACR access key
         GITHUB_REPO = 'https://github.com/Mazin2k2/cicd-azure-jenkins.git'  // Your GitHub repository
+        KUBE_CONFIG = credentials('aks-kubeconfig')  // Jenkins secret containing your AKS kubeconfig
     }
 
     stages {
@@ -52,6 +53,26 @@ pipeline {
             }
         }
 
+        stage('Deploy to AKS') {
+            steps {
+                script {
+                    // Deploy to AKS using kubectl
+                    withCredentials([file(credentialsId: 'aks-kubeconfig', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            # Ensure kubectl is configured with the correct credentials
+                            export KUBECONFIG=${KUBECONFIG}
+
+                            # Update the image in the Kubernetes deployment
+                            kubectl set image deployment/python-web-app python-web-app=${ACR_URL}/${IMAGE_NAME}:${IMAGE_TAG} --record
+
+                            # Apply Kubernetes manifests (optional: for initial deployment)
+                            kubectl apply -f web-app.yaml
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Clean up Docker Images') {
             steps {
                 script {
@@ -66,7 +87,7 @@ pipeline {
 
     post {
         success {
-            echo 'Docker image successfully built and pushed to ACR!'
+            echo 'Docker image successfully built, pushed to ACR, and deployed to AKS!'
         }
         failure {
             echo 'There was an error in the pipeline!'
